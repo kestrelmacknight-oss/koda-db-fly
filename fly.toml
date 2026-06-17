@@ -1,29 +1,30 @@
-# fly.toml app configuration file generated for koda-db-fly on 2026-06-17T20:34:41Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
-app = 'koda-db-fly'
-primary_region = 'iad'
-
+app            = "koda-scylla"
+primary_region = "iad"
+ 
+# ── Build ─────────────────────────────────────────────────────────────────
 [build]
-
+  # Uses the Dockerfile in this directory
+ 
+# ── Environment ───────────────────────────────────────────────────────────
 [env]
-  SCYLLA_MEMORY = '3G'
-  SCYLLA_SMP = '2'
-
-[[mounts]]
-  source = 'scylla_data'
-  destination = '/var/lib/scylla'
-
-[http_service]
-  internal_port = 9042
-  force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
-
+  SCYLLA_SMP    = "2"
+  SCYLLA_MEMORY = "3G"
+ 
+# ── Machine sizing ────────────────────────────────────────────────────────
+# performance-2x: 2 dedicated vCPUs, 4GB RAM
+# ScyllaDB needs real CPU and RAM — do not use shared-cpu machines.
 [[vm]]
-  size = 'performance-2x'
-  memory = '4gb'
+  size   = "performance-2x"
+  memory = "4gb"
+ 
+# ── Persistent data volume ────────────────────────────────────────────────
+# Created separately with: fly volumes create scylla_data --size 20 --app koda-scylla
+# ScyllaDB stores all data here. Deleting this volume destroys all message history.
+[[mounts]]
+  source      = "scylla_data"
+  destination = "/var/lib/scylla"
+ 
+# Note: No [http_service] or [[services]] sections.
+# ScyllaDB port 9042 is not exposed publicly.
+# Phoenix connects to it exclusively via Fly's private 6PN network
+# using the hostname: koda-scylla.internal:9042
