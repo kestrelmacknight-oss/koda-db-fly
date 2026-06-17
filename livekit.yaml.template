@@ -1,0 +1,29 @@
+# LiveKit server configuration template for Koda.
+# __API_KEY__ and __API_SECRET__ are substituted at container startup
+# by entrypoint.sh, using the LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+# Fly secrets. Nothing here is a real credential.
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  # Single-port UDP mux for ICE/RTP media. Far simpler to expose on
+  # Fly than the usual 50000-60000 port range -- only one UDP port
+  # needs to be opened and reachable.
+  udp_port: 7882
+  # LiveKit auto-detects its public IP via STUN so WebRTC clients can
+  # reach it. Do not hardcode Fly's private 6PN address here -- that
+  # address is not internet-routable and will break voice/video.
+  use_external_ip: true
+
+keys:
+  __API_KEY__: __API_SECRET__
+
+# Room defaults
+room:
+  auto_create: true
+  empty_timeout: 300
+  departure_timeout: 20
+
+# Don't log to a file inside the container -- Fly captures stdout/stderr
+log_level: info

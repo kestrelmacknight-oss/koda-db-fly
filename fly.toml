@@ -1,0 +1,42 @@
+app            = "koda-livekit"
+primary_region = "iad"
+
+[build]
+  # Uses the Dockerfile in this directory
+
+# ── Signaling / HTTP (WebSocket upgrade for clients connecting to LiveKit) ──
+[[services]]
+  protocol      = "tcp"
+  internal_port = 7880
+
+  [[services.ports]]
+    port     = 443
+    handlers = ["tls", "http"]
+  [[services.ports]]
+    port     = 80
+    handlers = ["http"]
+
+  [[services.tcp_checks]]
+    interval     = "15s"
+    timeout      = "2s"
+    grace_period = "10s"
+
+# ── TCP fallback for WebRTC media (used when UDP is blocked on the client) ──
+[[services]]
+  protocol      = "tcp"
+  internal_port = 7881
+
+  [[services.ports]]
+    port = 7881
+
+# ── UDP media (ICE/RTP) -- single muxed port, see livekit.yaml.template ────
+[[services]]
+  protocol      = "udp"
+  internal_port = 7882
+
+  [[services.ports]]
+    port = 7882
+
+[[vm]]
+  size   = "shared-cpu-2x"
+  memory = "1gb"
