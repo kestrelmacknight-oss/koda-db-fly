@@ -1,0 +1,106 @@
+# Phoenix ScyllaDB Integration — Exact Changes Required
+#
+# Apply these in order. All paths are relative to your koda-server/ root.
+# ============================================================================
+
+# ── 1. mix.exs — add two dependencies ────────────────────────────────────
+#
+# Find the deps() function and add:
+
+  {:xandra, "~> 0.18"},   # ScyllaDB / Cassandra driver
+  {:uuid,   "~> 1.1"},    # UUIDv1 (TimeUUID) generation for message IDs
+
+# ── 2. config/config.exs — add ScyllaDB defaults ─────────────────────────
+#
+# Add anywhere in the file (before the import_config at the bottom):
+
+config :koda, :scylla,
+  nodes:     ["localhost:9042"],
+  keyspace:  "koda",
+  pool_size: 10
+
+# ── 3. config/runtime.exs — add production ScyllaDB config ───────────────
+#
+# Inside the `if config_env() == :prod do` block, add:
+
+  scylla_nodes =
+    System.get_env("SCYLLA_NODES", "koda-scylla.internal:9042")
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+
+  config :koda, :scylla,
+    nodes:             scylla_nodes,
+    keyspace:          "koda",
+    pool_size:         String.to_integer(System.get_env("SCYLLA_POOL_SIZE", "20")),
+    # Fly.io's private network (6PN) uses IPv6.
+    # This tells Xandra to connect over IPv6 when resolving .internal hostnames.
+    transport_options: [inet6: true]
+
+# ── 4. lib/koda/scylla.ex — update start_link to pass transport options ──
+#
+# Find the start_link function and change it to:
+
+  def start_link do
+    cfg   = Application.fetch_env!(:koda, :scylla)
+    nodes = Keyword.fetch!(cfg, :nodes)
+    opts  = [
+      name:              @pool_name,
+      nodes:             nodes,
+      pool_size:         Keyword.get(cfg, :pool_size, 10),
+      keyspace:          @keyspace,
+      authentication:    build_auth(cfg),
+      # Pass transport_options from config (includes inet6: true in production)
+      transport_options: Keyword.get(cfg, :transport_options, [])
+    ]
+    Xandra.Cluster.start_link(opts)
+  end
+
+# ── 5. lib/koda/application.ex — add Scylla to supervision tree ──────────
+#
+# Find children = [ ... ] and add BEFORE KodaWeb.Endpoint:
+#
+#   Koda.Scylla,            # ← add this
+#   Koda.Scylla.Prepared,   # ← add this
+#
+# Then after Supervisor.start_link, add:
+#
+#   Koda.Scylla.Schema.setup!()
+#
+# So the bottom of start/2 looks like:
+#
+#   {:ok, pid} = Supervisor.start_link(children, opts)
+#   if Application.get_env(:koda, :env) == :prod do
+#     Koda.Scylla.Schema.setup!()
+#   end
+#   {:ok, pid}
+
+# ── 6. Migrations — remove messages from PostgreSQL ───────────────────────
+#
+# Create a new migration:
+# priv/repo/migrations/20240106000001_remove_messages_from_postgres.exs
+#
+# Content:
+#
+#   defmodule Koda.Repo.Migrations.RemoveMessagesFromPostgres do
+#     use Ecto.Migration
+#     def up do
+#       execute "DROP INDEX IF EXISTS messages_fts"
+#       drop_if_exists table(:messages)
+#       drop_if_exists table(:dm_messages)
+#     end
+#     def down, do: raise "Not reversible"
+#   end
+#
+# If you never ran the migration that created messages in PostgreSQL,
+# skip this — the table doesn't exist to drop.
+
+# ── 7. Files to copy from KodaScyllaDB.zip ───────────────────────────────
+#
+# Copy these files into your koda-server/ directory:
+#
+#   server/lib/koda/scylla.ex             → lib/koda/scylla.ex          (REPLACE)
+#   server/lib/koda/scylla/schema.ex      → lib/koda/scylla/schema.ex   (NEW)
+#   server/lib/koda/scylla/prepared.ex    → lib/koda/scylla/prepared.ex (NEW)
+#   server/lib/koda/chat.ex               → lib/koda/chat.ex            (REPLACE)
+#   server/lib/koda/direct_messages.ex    → lib/koda/direct_messages.ex (REPLACE)
+#   server/priv/cql/schema.cql            → priv/cql/schema.cql         (NEW)
