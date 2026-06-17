@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for koda-db-fly on 2026-06-17T20:33:04Z
+# fly.toml app configuration file generated for koda-db-fly on 2026-06-17T20:34:41Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -17,7 +17,7 @@ primary_region = 'iad'
   destination = '/var/lib/scylla'
 
 [http_service]
-  internal_port = 8080
+  internal_port = 9042
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
