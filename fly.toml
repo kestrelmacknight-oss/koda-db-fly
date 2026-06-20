@@ -8,7 +8,7 @@ primary_region = "iad"
 # ── Environment ───────────────────────────────────────────────────────────
 [env]
   SCYLLA_SMP    = "2"
-  SCYLLA_MEMORY = "3G"
+  SCYLLA_MEMORY = "1500M"
  
 # ── Machine sizing ────────────────────────────────────────────────────────
 # performance-2x: 2 dedicated vCPUs, 4GB RAM
