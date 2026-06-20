@@ -1,46 +1,43 @@
 #!/bin/bash
 # ScyllaDB entrypoint for Fly.io
-# Fly injects FLY_PRIVATE_IP as the machine's IPv6 address on the
-# private 6PN network. ScyllaDB needs to bind to this address so
-# other Fly apps (Phoenix) can reach it via the .internal hostname.
 #
-# broadcast-address / broadcast-rpc-address are intentionally NOT
-# passed -- Scylla's address-resolution path can attempt a DNS lookup
-# even on literal IPv6 addresses and fail with "Bad name" (C-Ares).
-# Observed evidence: this has hit listen-address on one boot and
-# broadcast-address on another, with identical input -- not a bug
-# tied to one specific flag, but a startup race where Scylla's
-# resolver runs before the container's own networking has fully
-# settled. The fix is a short delay before launching Scylla at all,
-# giving the network namespace a moment to finish initializing.
+# listen-address / rpc-address are deliberately NOT set to Fly's
+# private IPv6 address (FLY_PRIVATE_IP). Scylla's bundled c-ares
+# resolver has proven unreliable parsing that literal -- the same
+# exact value has failed resolution on listen-address on one boot and
+# broadcast-address on another, even with a startup delay added. That
+# rules out a timing race; it's the resolver itself struggling with
+# this address format.
+#
+# Fix: sidestep address resolution entirely.
+#   - listen-address: 127.0.0.1 -- only used for this node's own
+#     internal gossip protocol. Irrelevant for a single, standalone
+#     node with no clustering, so loopback is fine and never needs
+#     any external resolution.
+#   - rpc-address: 0.0.0.0 -- binds the CQL listener to every
+#     interface, including Fly's private IPv6 address. Phoenix
+#     reaches this node via koda-db-fly.internal:9042, which Fly's
+#     own DNS resolves independently of anything happening in this
+#     container -- the troublesome literal never has to be parsed by
+#     Scylla itself at all.
 
 set -e
-
-echo "[koda-entrypoint] Waiting for container networking to settle..."
-sleep 5
-
-if [ -n "$FLY_PRIVATE_IP" ]; then
-    LISTEN_ADDR="$FLY_PRIVATE_IP"
-    echo "[koda-entrypoint] Using Fly private IP: $LISTEN_ADDR"
-else
-    LISTEN_ADDR=$(hostname -I | awk '{print $1}')
-    echo "[koda-entrypoint] FLY_PRIVATE_IP not set, using: $LISTEN_ADDR"
-fi
 
 SMP="${SCYLLA_SMP:-2}"
 MEMORY="${SCYLLA_MEMORY:-1500M}"
 
 echo "[koda-entrypoint] Starting ScyllaDB -- smp=$SMP memory=$MEMORY"
+echo "[koda-entrypoint] listen-address=127.0.0.1 (internal only) rpc-address=0.0.0.0 (all interfaces)"
 
 exec /docker-entrypoint.py \
     --smp           "$SMP" \
     --memory        "$MEMORY" \
     --overprovisioned 1 \
-    --listen-address "$LISTEN_ADDR" \
-    --rpc-address    "$LISTEN_ADDR" \
+    --listen-address 127.0.0.1 \
+    --rpc-address    0.0.0.0 \
     --api-address    0.0.0.0 \
     --seed-provider-class-name \
         org.apache.cassandra.locator.SimpleSeedProvider \
-    --seed "$LISTEN_ADDR" \
+    --seed 127.0.0.1 \
     --authenticator AllowAllAuthenticator \
     --authorizer   AllowAllAuthorizer
