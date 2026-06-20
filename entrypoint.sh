@@ -1,18 +1,15 @@
 #!/bin/bash
 # ScyllaDB entrypoint for Fly.io
 #
-# listen-address stays 127.0.0.1 -- confirmed working, gossip-only,
-# irrelevant for a single standalone node.
-#
-# rpc-address stays 0.0.0.0 (all interfaces) -- but Scylla's own
-# config validation requires broadcast_rpc_address to be explicitly
-# set whenever rpc_address is a wildcard. broadcast-rpc-address is
-# the one address that genuinely must be the real Fly private IP,
-# since it's what Scylla advertises as "connect to me here." Bracket
-# notation is used since the evidence so far points to Scylla's
-# resolver specifically mishandling unbracketed IPv6 literals (IPv4
-# loopback resolved with zero issues; the Fly IPv6 literal is what's
-# repeatedly tripped up resolution).
+# broadcast-rpc-address must be the real Fly private address so
+# Phoenix can actually reach this node -- but every attempt to give
+# Scylla that address as a literal IPv6 string has failed resolution
+# (plain and bracketed both fail with the same C-Ares "Bad name").
+# 127.0.0.1 resolved cleanly for listen-address, and a real hostname
+# would also need to go through genuine resolution -- so instead of
+# fighting the "is this already an IP" parsing path, this maps the
+# real address to a plain hostname in /etc/hosts (resolved locally,
+# no network involved) and gives Scylla that hostname instead.
 
 set -e
 
@@ -22,11 +19,13 @@ else
     PRIVATE_ADDR=$(hostname -I | awk '{print $1}')
 fi
 
+echo "$PRIVATE_ADDR koda-broadcast" >> /etc/hosts
+
 SMP="${SCYLLA_SMP:-2}"
 MEMORY="${SCYLLA_MEMORY:-1500M}"
 
 echo "[koda-entrypoint] Starting ScyllaDB -- smp=$SMP memory=$MEMORY"
-echo "[koda-entrypoint] broadcast-rpc-address=[$PRIVATE_ADDR]"
+echo "[koda-entrypoint] broadcast-rpc-address=koda-broadcast -> $PRIVATE_ADDR (via /etc/hosts)"
 
 exec /docker-entrypoint.py \
     --smp           "$SMP" \
@@ -34,7 +33,7 @@ exec /docker-entrypoint.py \
     --overprovisioned 1 \
     --listen-address       127.0.0.1 \
     --rpc-address           0.0.0.0 \
-    --broadcast-rpc-address "[$PRIVATE_ADDR]" \
+    --broadcast-rpc-address koda-broadcast \
     --api-address           0.0.0.0 \
     --seed-provider-class-name \
         org.apache.cassandra.locator.SimpleSeedProvider \
