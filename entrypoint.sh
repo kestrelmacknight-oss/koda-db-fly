@@ -1,42 +1,42 @@
 #!/bin/bash
 # ScyllaDB entrypoint for Fly.io
+# Fly injects FLY_PRIVATE_IP as the machine's IPv6 address on the
+# private 6PN network. ScyllaDB binds to this address directly so
+# other Fly apps (Phoenix) can reach it via the .internal hostname.
 #
-# broadcast-rpc-address must be the real Fly private address so
-# Phoenix can actually reach this node -- but every attempt to give
-# Scylla that address as a literal IPv6 string has failed resolution
-# (plain and bracketed both fail with the same C-Ares "Bad name").
-# 127.0.0.1 resolved cleanly for listen-address, and a real hostname
-# would also need to go through genuine resolution -- so instead of
-# fighting the "is this already an IP" parsing path, this maps the
-# real address to a plain hostname in /etc/hosts (resolved locally,
-# no network involved) and gives Scylla that hostname instead.
+# This is the clean, originally-intended version -- no loopback
+# substitution, no wildcard binding, no bracket notation, no /etc/hosts
+# workaround. All of that was compensating for an IPv6 address-parsing
+# bug in ScyllaDB 6.2.3 (segfaulted even after working around the
+# resolution error). Now running on the 2025.1 LTS lane, which should
+# not have that regression.
 
 set -e
 
 if [ -n "$FLY_PRIVATE_IP" ]; then
-    PRIVATE_ADDR="$FLY_PRIVATE_IP"
+    LISTEN_ADDR="$FLY_PRIVATE_IP"
+    echo "[koda-entrypoint] Using Fly private IP: $LISTEN_ADDR"
 else
-    PRIVATE_ADDR=$(hostname -I | awk '{print $1}')
+    LISTEN_ADDR=$(hostname -I | awk '{print $1}')
+    echo "[koda-entrypoint] FLY_PRIVATE_IP not set, using: $LISTEN_ADDR"
 fi
-
-echo "$PRIVATE_ADDR koda-broadcast" >> /etc/hosts
 
 SMP="${SCYLLA_SMP:-2}"
 MEMORY="${SCYLLA_MEMORY:-1500M}"
 
 echo "[koda-entrypoint] Starting ScyllaDB -- smp=$SMP memory=$MEMORY"
-echo "[koda-entrypoint] broadcast-rpc-address=koda-broadcast -> $PRIVATE_ADDR (via /etc/hosts)"
 
 exec /docker-entrypoint.py \
     --smp           "$SMP" \
     --memory        "$MEMORY" \
     --overprovisioned 1 \
-    --listen-address       127.0.0.1 \
-    --rpc-address           0.0.0.0 \
-    --broadcast-rpc-address koda-broadcast \
+    --listen-address        "$LISTEN_ADDR" \
+    --rpc-address           "$LISTEN_ADDR" \
+    --broadcast-rpc-address "$LISTEN_ADDR" \
+    --broadcast-address     "$LISTEN_ADDR" \
     --api-address           0.0.0.0 \
     --seed-provider-class-name \
         org.apache.cassandra.locator.SimpleSeedProvider \
-    --seed 127.0.0.1 \
+    --seed "$LISTEN_ADDR" \
     --authenticator AllowAllAuthenticator \
     --authorizer   AllowAllAuthorizer
