@@ -5,14 +5,19 @@
 # other Fly apps (Phoenix) can reach it via the .internal hostname.
 #
 # broadcast-address / broadcast-rpc-address are intentionally NOT
-# passed explicitly -- Scylla's broadcast_address resolution path
-# attempts a DNS lookup even on literal IPv6 addresses and fails with
-# "Couldn't resolve broadcast_address" (C-Ares "Bad name"). Per
-# Scylla's documented default, broadcast_address falls back to
-# listen_address automatically when left unset, which avoids that
-# broken resolution path entirely while producing the same result.
+# passed -- Scylla's address-resolution path can attempt a DNS lookup
+# even on literal IPv6 addresses and fail with "Bad name" (C-Ares).
+# Observed evidence: this has hit listen-address on one boot and
+# broadcast-address on another, with identical input -- not a bug
+# tied to one specific flag, but a startup race where Scylla's
+# resolver runs before the container's own networking has fully
+# settled. The fix is a short delay before launching Scylla at all,
+# giving the network namespace a moment to finish initializing.
 
 set -e
+
+echo "[koda-entrypoint] Waiting for container networking to settle..."
+sleep 5
 
 if [ -n "$FLY_PRIVATE_IP" ]; then
     LISTEN_ADDR="$FLY_PRIVATE_IP"
