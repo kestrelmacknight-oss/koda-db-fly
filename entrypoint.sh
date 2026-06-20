@@ -1,41 +1,41 @@
 #!/bin/bash
 # ScyllaDB entrypoint for Fly.io
 #
-# listen-address / rpc-address are deliberately NOT set to Fly's
-# private IPv6 address (FLY_PRIVATE_IP). Scylla's bundled c-ares
-# resolver has proven unreliable parsing that literal -- the same
-# exact value has failed resolution on listen-address on one boot and
-# broadcast-address on another, even with a startup delay added. That
-# rules out a timing race; it's the resolver itself struggling with
-# this address format.
+# listen-address stays 127.0.0.1 -- confirmed working, gossip-only,
+# irrelevant for a single standalone node.
 #
-# Fix: sidestep address resolution entirely.
-#   - listen-address: 127.0.0.1 -- only used for this node's own
-#     internal gossip protocol. Irrelevant for a single, standalone
-#     node with no clustering, so loopback is fine and never needs
-#     any external resolution.
-#   - rpc-address: 0.0.0.0 -- binds the CQL listener to every
-#     interface, including Fly's private IPv6 address. Phoenix
-#     reaches this node via koda-db-fly.internal:9042, which Fly's
-#     own DNS resolves independently of anything happening in this
-#     container -- the troublesome literal never has to be parsed by
-#     Scylla itself at all.
+# rpc-address stays 0.0.0.0 (all interfaces) -- but Scylla's own
+# config validation requires broadcast_rpc_address to be explicitly
+# set whenever rpc_address is a wildcard. broadcast-rpc-address is
+# the one address that genuinely must be the real Fly private IP,
+# since it's what Scylla advertises as "connect to me here." Bracket
+# notation is used since the evidence so far points to Scylla's
+# resolver specifically mishandling unbracketed IPv6 literals (IPv4
+# loopback resolved with zero issues; the Fly IPv6 literal is what's
+# repeatedly tripped up resolution).
 
 set -e
+
+if [ -n "$FLY_PRIVATE_IP" ]; then
+    PRIVATE_ADDR="$FLY_PRIVATE_IP"
+else
+    PRIVATE_ADDR=$(hostname -I | awk '{print $1}')
+fi
 
 SMP="${SCYLLA_SMP:-2}"
 MEMORY="${SCYLLA_MEMORY:-1500M}"
 
 echo "[koda-entrypoint] Starting ScyllaDB -- smp=$SMP memory=$MEMORY"
-echo "[koda-entrypoint] listen-address=127.0.0.1 (internal only) rpc-address=0.0.0.0 (all interfaces)"
+echo "[koda-entrypoint] broadcast-rpc-address=[$PRIVATE_ADDR]"
 
 exec /docker-entrypoint.py \
     --smp           "$SMP" \
     --memory        "$MEMORY" \
     --overprovisioned 1 \
-    --listen-address 127.0.0.1 \
-    --rpc-address    0.0.0.0 \
-    --api-address    0.0.0.0 \
+    --listen-address       127.0.0.1 \
+    --rpc-address           0.0.0.0 \
+    --broadcast-rpc-address "[$PRIVATE_ADDR]" \
+    --api-address           0.0.0.0 \
     --seed-provider-class-name \
         org.apache.cassandra.locator.SimpleSeedProvider \
     --seed 127.0.0.1 \
