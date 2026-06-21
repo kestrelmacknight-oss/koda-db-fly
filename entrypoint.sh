@@ -1,10 +1,7 @@
 #!/bin/bash
-# /etc/scylla/scylla.yaml is the binary's default config path --
-# no explicit flag needed to point at it (--config-file isn't a
-# recognized option). Our pre-written scylla.yaml is already sitting
-# at that exact default location via the Dockerfile COPY, so the
-# binary should pick it up automatically with zero extra arguments
-# for the config path itself.
+# scylla looks for "conf/scylla.yaml" relative to its working
+# directory -- cd into /scylla-config (where Dockerfile placed
+# conf/scylla.yaml) before launching, so that relative path resolves.
 
 set -e
 
@@ -16,7 +13,9 @@ fi
 
 echo "$PRIVATE_ADDR koda-broadcast" >> /etc/hosts
 echo "[koda-entrypoint] /etc/hosts mapping: koda-broadcast -> $PRIVATE_ADDR"
-echo "[koda-entrypoint] Relying on default config path /etc/scylla/scylla.yaml (no explicit flag)"
+
+cd /scylla-config
+echo "[koda-entrypoint] Working directory: $(pwd) -- conf/scylla.yaml should now resolve"
 
 exec /usr/bin/scylla \
     --log-to-syslog 0 \
