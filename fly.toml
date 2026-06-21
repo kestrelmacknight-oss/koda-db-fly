@@ -1,30 +1,30 @@
-app            = "koda-scylla"
+app            = "koda-db-fly"
 primary_region = "iad"
- 
-# ── Build ─────────────────────────────────────────────────────────────────
+
 [build]
   # Uses the Dockerfile in this directory
- 
-# ── Environment ───────────────────────────────────────────────────────────
+
 [env]
   SCYLLA_SMP    = "2"
   SCYLLA_MEMORY = "1500M"
- 
-# ── Machine sizing ────────────────────────────────────────────────────────
-# performance-2x: 2 dedicated vCPUs, 4GB RAM
-# ScyllaDB needs real CPU and RAM — do not use shared-cpu machines.
+
 [[vm]]
   size   = "performance-2x"
-  memory = "4gb"
- 
-# ── Persistent data volume ────────────────────────────────────────────────
-# Created separately with: fly volumes create scylla_data --size 20 --app koda-scylla
-# ScyllaDB stores all data here. Deleting this volume destroys all message history.
+  memory = "4096"
+
 [[mounts]]
   source      = "scylla_data"
   destination = "/var/lib/scylla"
- 
-# Note: No [http_service] or [[services]] sections.
-# ScyllaDB port 9042 is not exposed publicly.
-# Phoenix connects to it exclusively via Fly's private 6PN network
-# using the hostname: koda-scylla.internal:9042
+
+# Explicitly declaring the CQL port for Fly's private network.
+# Every entrypoint/address-binding fix so far has been confirmed
+# correct from inside this machine -- 150 consecutive connection
+# attempts from koda-server have still all failed, which points at
+# something in how this port is exposed to Fly's network fabric
+# itself, not at ScyllaDB's own configuration.
+[[services]]
+  internal_port = 9042
+  protocol       = "tcp"
+
+  [[services.ports]]
+    port = 9042
