@@ -1,6 +1,9 @@
 FROM scylladb/scylla:2025.1.13
 
-# Copy custom entrypoint that handles Fly.io's private network addressing
+# Real scylla.yaml, not CLI-flag translation -- testing whether
+# /etc/hosts + enable_ipv6_dns_lookup actually works through this
+# genuinely different config path.
+COPY scylla.yaml /etc/scylla/scylla.yaml
 COPY entrypoint.sh /koda-entrypoint.sh
 RUN chmod +x /koda-entrypoint.sh
 

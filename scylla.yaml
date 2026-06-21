@@ -1,0 +1,11 @@
+cluster_name: koda
+listen_address: 127.0.0.1
+rpc_address: koda-broadcast
+api_address: 0.0.0.0
+enable_ipv6_dns_lookup: true
+authenticator: AllowAllAuthenticator
+authorizer: AllowAllAuthorizer
+seed_provider:
+  - class_name: org.apache.cassandra.locator.SimpleSeedProvider
+    parameters:
+      - seeds: "127.0.0.1"
