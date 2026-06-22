@@ -16,12 +16,10 @@ primary_region = "iad"
   source      = "scylla_data"
   destination = "/var/lib/scylla"
 
-# Explicitly declaring the CQL port for Fly's private network.
-# Every entrypoint/address-binding fix so far has been confirmed
-# correct from inside this machine -- 150 consecutive connection
-# attempts from koda-server have still all failed, which points at
-# something in how this port is exposed to Fly's network fabric
-# itself, not at ScyllaDB's own configuration.
+# Intentionally public -- Xandra's hardcoded IPv4 DNS resolution made
+# Fly's IPv6-only private network unworkable for this connection.
+# Exposing this port publicly is only safe because PasswordAuthenticator
+# is now genuinely enforced (confirmed working with the koda_app role).
 [[services]]
   internal_port = 9042
   protocol       = "tcp"
