@@ -1,6 +1,8 @@
 cluster_name: koda
 listen_address: 127.0.0.1
 rpc_address: koda-broadcast
+broadcast_address: koda-broadcast
+broadcast_rpc_address: koda-broadcast
 api_address: 0.0.0.0
 enable_ipv6_dns_lookup: true
 authenticator: AllowAllAuthenticator
