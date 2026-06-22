@@ -10,4 +10,4 @@ authorizer: AllowAllAuthorizer
 seed_provider:
   - class_name: org.apache.cassandra.locator.SimpleSeedProvider
     parameters:
-      - seeds: "127.0.0.1"
+      - seeds: "koda-broadcast"
